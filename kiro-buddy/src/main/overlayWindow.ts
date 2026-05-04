@@ -22,11 +22,15 @@ const MAX_RETRIES = 3
 /** Delay in milliseconds between retry attempts (Requirement 10.1) */
 const RETRY_DELAY_MS = 2000
 
+/** Windows/Electron apps can occasionally steal z-order; refresh top-most state. */
+const TOP_MOST_REFRESH_MS = 1500
+
 // ---------------------------------------------------------------------------
 // Module-level window reference
 // ---------------------------------------------------------------------------
 
 let win: BrowserWindow | null = null
+let topMostTimer: NodeJS.Timeout | null = null
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -56,6 +60,44 @@ export function configureMacFullscreenOverlay(
   }
 }
 
+function enforceTopMost(window: BrowserWindow): void {
+  if (window.isDestroyed()) {
+    return
+  }
+
+  if (typeof window.setAlwaysOnTop === 'function') {
+    window.setAlwaysOnTop(true, 'screen-saver', 1)
+  }
+
+  if (typeof window.moveTop === 'function') {
+    window.moveTop()
+  }
+
+  if (typeof window.showInactive === 'function' && !window.isVisible()) {
+    window.showInactive()
+  }
+}
+
+function startTopMostRefresh(window: BrowserWindow): void {
+  if (topMostTimer) {
+    clearInterval(topMostTimer)
+  }
+
+  enforceTopMost(window)
+  window.on('blur', () => enforceTopMost(window))
+  window.on('show', () => enforceTopMost(window))
+  window.on('restore', () => enforceTopMost(window))
+  window.on('closed', () => {
+    if (topMostTimer) {
+      clearInterval(topMostTimer)
+      topMostTimer = null
+    }
+  })
+
+  topMostTimer = setInterval(() => enforceTopMost(window), TOP_MOST_REFRESH_MS)
+  topMostTimer.unref?.()
+}
+
 /**
  * Attempts to create a BrowserWindow with the given config.
  * Retries up to MAX_RETRIES times on failure, then exits gracefully.
@@ -81,6 +123,7 @@ function createWithRetry(config: OverlayWindowConfig, attempt: number = 1): void
     })
 
     configureMacFullscreenOverlay(win)
+    startTopMostRefresh(win)
 
     if (typeof win.loadFile === 'function') {
       win.loadFile(path.join(__dirname, '..', '..', 'renderer', 'index.html'))
