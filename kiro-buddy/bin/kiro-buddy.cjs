@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { spawnSync } = require('child_process')
+const { spawn, spawnSync } = require('child_process')
 const path = require('path')
 
 const packageRoot = path.resolve(__dirname, '..')
@@ -31,6 +31,47 @@ function startBuddy() {
   process.exit(result.status ?? 1)
 }
 
+function startBuddyDetached() {
+  let electronBinary
+  try {
+    electronBinary = require('electron')
+  } catch {
+    console.error('Electron is missing. Reinstall kiro-buddy and try again.')
+    process.exit(1)
+  }
+
+  if (process.platform === 'win32') {
+    const quotePowerShellString = (value) => `'${String(value).replace(/'/g, "''")}'`
+    const command = [
+      `Start-Process -FilePath ${quotePowerShellString(electronBinary)}`,
+      `-ArgumentList ${quotePowerShellString(packageRoot)}`,
+      `-WorkingDirectory ${quotePowerShellString(packageRoot)}`,
+      '-WindowStyle Hidden',
+    ].join(' ')
+    const result = spawnSync(
+      'powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command],
+      {
+        stdio: 'ignore',
+        windowsHide: true,
+      },
+    )
+    if (result.status !== 0) {
+      process.exit(result.status ?? 1)
+    }
+    return
+  }
+
+  const child = spawn(electronBinary, [packageRoot], {
+    cwd: packageRoot,
+    detached: true,
+    stdio: 'ignore',
+    env: process.env,
+    windowsHide: true,
+  })
+  child.unref()
+}
+
 function printHelp() {
   console.log(`Kiro Buddy
 
@@ -58,6 +99,7 @@ switch (command) {
     runNodeScript('scripts/install-kiro-hooks.cjs', args)
     break
   case 'on':
+    startBuddyDetached()
     runNodeScript('scripts/kiro-status-hook.cjs', ['idle'])
     break
   case 'start':

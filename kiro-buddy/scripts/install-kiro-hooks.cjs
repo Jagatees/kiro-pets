@@ -51,9 +51,16 @@ function writeHook(shortName, hook) {
   return filePath
 }
 
+function removeStaleHook(shortName) {
+  const filePath = hookFileName(shortName)
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath)
+  }
+}
+
 const hooks = [
   {
-    shortName: 'kiro-buddy-start',
+    shortName: 'kiro-buddy-on',
     name: 'Kiro Buddy On',
     description: 'Turns Kiro Buddy on manually and switches it to the ready idle state.',
     when: { type: 'userTriggered' },
@@ -119,6 +126,7 @@ if (!fs.existsSync(sourceStatusHookPath)) {
 
 fs.mkdirSync(hookDir, { recursive: true })
 fs.mkdirSync(installedScriptDir, { recursive: true })
+removeStaleHook('kiro-buddy-start')
 fs.copyFileSync(sourceStatusHookPath, statusHookPath)
 fs.writeFileSync(
   installMetadataPath,
