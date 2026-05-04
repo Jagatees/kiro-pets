@@ -173,13 +173,17 @@ window.addEventListener('DOMContentLoaded', () => {
   })
   let statusVersion = 0
 
-  window.kiroBuddy?.onStatusUpdate((payload) => {
-    statusVersion += 1
-    const version = statusVersion
+  function applyPayload(payload: StatusPayload): void {
     const label = formatStatusLabel(payload)
     pet.dataset.status = payload.status
     statusLabel.textContent = label
     pet.setAttribute('aria-label', label)
+  }
+
+  window.kiroBuddy?.onStatusUpdate((payload) => {
+    statusVersion += 1
+    const version = statusVersion
+    applyPayload(payload)
     stateMachine.dispatch(payload.status, payload.message)
     animationRenderer.play({
       key: animationKeyForPayload(payload),
@@ -193,10 +197,7 @@ window.addEventListener('DOMContentLoaded', () => {
               }
 
               const nextPayload = idlePayload()
-              const idleLabel = formatStatusLabel(nextPayload)
-              pet.dataset.status = nextPayload.status
-              statusLabel.textContent = idleLabel
-              pet.setAttribute('aria-label', idleLabel)
+              applyPayload(nextPayload)
               stateMachine.dispatch(nextPayload.status, nextPayload.message)
             }
           : undefined,

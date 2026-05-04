@@ -91,6 +91,7 @@ export const VALID_TRANSITIONS: ReadonlyArray<readonly [PetState, PetState]> = [
   ['working', 'asking'],
   ['working', 'error'],
   ['waiting', 'working'],
+  ['waiting', 'done'],
   ['waiting', 'error'],
   ['asking', 'working'],
   ['asking', 'done'],
@@ -98,6 +99,7 @@ export const VALID_TRANSITIONS: ReadonlyArray<readonly [PetState, PetState]> = [
   ['asking', 'idle'],
   ['done', 'working'],
   ['done', 'idle'],
+  ['done', 'done'],
   ['error', 'idle'],
 ] as const
 

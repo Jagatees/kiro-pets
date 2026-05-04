@@ -67,11 +67,20 @@ export class PetStateMachineImpl implements PetStateMachine {
   dispatch(newState: PetState, message: string): void {
     const previousState = this.currentState
 
+    if (previousState === newState) {
+      this.applyState(previousState, newState, message)
+      return
+    }
+
     if (!isValidTransition(previousState, newState)) {
       console.log(`Invalid transition: ${previousState} → ${newState}`)
       return
     }
 
+    this.applyState(previousState, newState, message)
+  }
+
+  private applyState(previousState: PetState, newState: PetState, message: string): void {
     // Update state
     this.currentState = newState
 
