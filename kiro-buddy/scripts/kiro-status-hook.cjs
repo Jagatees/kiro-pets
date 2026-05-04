@@ -44,6 +44,16 @@ function delayMsFromArgs() {
   return Number.isFinite(delayMs) && delayMs > 0 ? Math.min(delayMs, 5000) : 0
 }
 
+function fallbackAskingMsFromArgs() {
+  const fallbackArg = args.find((arg) => arg.startsWith('--fallback-asking-ms='))
+  if (!fallbackArg) {
+    return 0
+  }
+
+  const fallbackMs = Number(fallbackArg.slice('--fallback-asking-ms='.length))
+  return Number.isFinite(fallbackMs) && fallbackMs > 0 ? Math.min(fallbackMs, 10000) : 0
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -68,6 +78,27 @@ function scheduleDelayedWrite(status) {
   child.unref()
   console.log(`Kiro Buddy: scheduled ${status}`)
   return true
+}
+
+function scheduleFallbackAsking(payload) {
+  const fallbackMs = fallbackAskingMsFromArgs()
+  if (payload.status !== 'working' || fallbackMs <= 0 || process.env.KIRO_BUDDY_DELAYED_WRITE === '1') {
+    return
+  }
+
+  const child = spawn(process.execPath, [__filename, 'asking', `--delay-ms=${fallbackMs}`], {
+    cwd: process.cwd(),
+    detached: true,
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      KIRO_BUDDY_DELAYED_WRITE: '1',
+      KIRO_BUDDY_DELAY_STARTED_AT: String(payload.timestamp),
+      KIRO_BUDDY_MESSAGE: 'Kiro is asking for your input',
+    },
+    windowsHide: true,
+  })
+  child.unref()
 }
 
 function readStatusTimestamp(statusFilePath) {
@@ -338,6 +369,7 @@ async function main() {
   const tempFile = `${statusFilePath}.${process.pid}.tmp`
   fs.writeFileSync(tempFile, `${JSON.stringify(payload)}\n`, 'utf8')
   fs.renameSync(tempFile, statusFilePath)
+  scheduleFallbackAsking(payload)
   console.log(`Kiro Buddy: ${status}`)
 }
 

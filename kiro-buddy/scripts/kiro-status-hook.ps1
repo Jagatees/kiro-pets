@@ -26,6 +26,20 @@ $phaseTitles = @{
   tasks = "Task List"
 }
 
+function Get-FlagValue([string] $Prefix) {
+  foreach ($flag in $Flags) {
+    if ($flag.StartsWith($Prefix)) {
+      return $flag.Substring($Prefix.Length)
+    }
+  }
+
+  return $null
+}
+
+function Quote-ProcessArgument([string] $Value) {
+  return "`"$($Value -replace '"', '\"')`""
+}
+
 function Get-InstallMetadata {
   $metadataPath = Join-Path $PSScriptRoot "install.json"
   if (-not (Test-Path $metadataPath)) {
@@ -91,6 +105,28 @@ Start-KiroBuddyIfNeeded
 $statusFilePath = $env:KIRO_BUDDY_STATUS_FILE
 if ([string]::IsNullOrWhiteSpace($statusFilePath)) {
   $statusFilePath = Join-Path $env:USERPROFILE ".kiro\status.json"
+}
+
+$delayMsText = Get-FlagValue "--delay-ms="
+if (-not [string]::IsNullOrWhiteSpace($delayMsText)) {
+  $delayMs = [int]$delayMsText
+  if ($delayMs -gt 0) {
+    Start-Sleep -Milliseconds ([Math]::Min($delayMs, 10000))
+  }
+
+  $startedAtText = Get-FlagValue "--started-at="
+  if (-not [string]::IsNullOrWhiteSpace($startedAtText) -and (Test-Path $statusFilePath)) {
+    try {
+      $existingForDelay = Get-Content -Raw -Path $statusFilePath | ConvertFrom-Json
+      $startedAt = [Int64]$startedAtText
+      if ($existingForDelay.timestamp -gt $startedAt) {
+        Write-Output "Kiro Buddy: skipped delayed $Status"
+        exit 0
+      }
+    } catch {
+      # Continue with the delayed write if the existing status cannot be parsed.
+    }
+  }
 }
 
 $message = $env:KIRO_BUDDY_MESSAGE
@@ -192,4 +228,33 @@ $tempFile = "$statusFilePath.$PID.tmp"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($tempFile, "$json`n", $utf8NoBom)
 Move-Item -Force -Path $tempFile -Destination $statusFilePath
+
+$fallbackAskingMsText = Get-FlagValue "--fallback-asking-ms="
+if (
+  $Status -eq "working" -and
+  -not [string]::IsNullOrWhiteSpace($fallbackAskingMsText)
+) {
+  $scriptArgs = @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    $PSCommandPath,
+    "asking",
+    "--delay-ms=$fallbackAskingMsText",
+    "--started-at=$($payload.timestamp)"
+  )
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = "powershell.exe"
+  $startInfo.Arguments = ($scriptArgs | ForEach-Object { Quote-ProcessArgument $_ }) -join " "
+  $startInfo.WorkingDirectory = (Get-Location).Path
+  $startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+  $startInfo.UseShellExecute = $false
+  $startInfo.EnvironmentVariables["KIRO_BUDDY_MESSAGE"] = "Kiro is asking for your input"
+  if (-not [string]::IsNullOrWhiteSpace($env:KIRO_BUDDY_STATUS_FILE)) {
+    $startInfo.EnvironmentVariables["KIRO_BUDDY_STATUS_FILE"] = $env:KIRO_BUDDY_STATUS_FILE
+  }
+  [System.Diagnostics.Process]::Start($startInfo) | Out-Null
+}
+
 Write-Output "Kiro Buddy: $Status"

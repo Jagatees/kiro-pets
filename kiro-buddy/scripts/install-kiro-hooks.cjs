@@ -33,6 +33,9 @@ function commandFor(status, phase, options = {}) {
     ...(options.readStdin ? ['--read-stdin'] : []),
     ...(options.requirePhase ? ['--require-phase'] : []),
     ...(typeof options.delayMs === 'number' ? [`--delay-ms=${options.delayMs}`] : []),
+    ...(typeof options.fallbackAskingMs === 'number'
+      ? [`--fallback-asking-ms=${options.fallbackAskingMs}`]
+      : []),
   ]
   const env = {}
 
@@ -115,7 +118,7 @@ const hooks = [
     description:
       'Notifies Kiro Buddy to switch to working whenever a prompt is submitted to the agent.',
     when: { type: 'promptSubmit' },
-    command: commandFor('working'),
+    command: commandFor('working', undefined, { fallbackAskingMs: 1800 }),
   },
   {
     shortName: 'kiro-buddy-waiting',
