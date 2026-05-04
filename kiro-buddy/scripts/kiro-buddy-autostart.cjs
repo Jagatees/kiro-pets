@@ -4,26 +4,31 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { fileURLToPath } = require('url')
-const { execFileSync, spawn } = require('child_process')
+const { execFileSync, spawn, spawnSync } = require('child_process')
 
 const packageRoot = path.resolve(__dirname, '..')
-const statusHookPath = path.join(packageRoot, 'scripts', 'kiro-status-hook.cjs')
 const statusFilePath = process.env.KIRO_BUDDY_STATUS_FILE || path.join(os.homedir(), '.kiro', 'status.json')
 const pollMs = Number(process.env.KIRO_BUDDY_AUTOSTART_POLL_MS || 3000)
-const workspaceStorageDir = path.join(
-  os.homedir(),
-  'Library',
-  'Application Support',
-  'Kiro',
-  'User',
-  'workspaceStorage',
-)
+const workspaceStorageDir =
+  process.platform === 'win32'
+    ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Kiro', 'User', 'workspaceStorage')
+    : path.join(os.homedir(), 'Library', 'Application Support', 'Kiro', 'User', 'workspaceStorage')
 
 let sawKiroRunning = false
 let startedThisKiroSession = false
 
 function processLines() {
   try {
+    if (process.platform === 'win32') {
+      const command = 'Get-CimInstance Win32_Process | Select-Object -ExpandProperty CommandLine'
+      const stdout = execFileSync('powershell.exe', ['-NoProfile', '-Command', command], {
+        encoding: 'utf8',
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      return stdout.split(/\r?\n/).filter(Boolean)
+    }
+
     const stdout = execFileSync('ps', ['-axo', 'command='], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -35,7 +40,12 @@ function processLines() {
 }
 
 function isKiroRunning(lines) {
-  return lines.some((line) => line.toLowerCase().includes('/kiro.app/'))
+  return lines.some((line) => {
+    const normalized = line.toLowerCase()
+    return process.platform === 'win32'
+      ? normalized.includes('\\kiro\\kiro.exe') || normalized.includes('/kiro/kiro.exe')
+      : normalized.includes('/kiro.app/')
+  })
 }
 
 function isBuddyRunning(lines) {
@@ -81,9 +91,10 @@ function recentWorkspacePaths() {
 
 function hasKiroBuddyHooks(workspacePath) {
   const hookDir = path.join(workspacePath, '.kiro', 'hooks')
-  const installedScript = path.join(workspacePath, '.kiro', 'kiro-buddy', 'kiro-status-hook.cjs')
+  const installedNodeScript = path.join(workspacePath, '.kiro', 'kiro-buddy', 'kiro-status-hook.cjs')
+  const installedPowerShellScript = path.join(workspacePath, '.kiro', 'kiro-buddy', 'kiro-status-hook.ps1')
 
-  if (fs.existsSync(installedScript)) {
+  if (fs.existsSync(installedNodeScript) || fs.existsSync(installedPowerShellScript)) {
     return true
   }
 
@@ -96,9 +107,8 @@ function hasKiroBuddyHooks(workspacePath) {
   }
 }
 
-function shouldAutostartForCurrentWorkspace() {
-  const [currentWorkspace] = recentWorkspacePaths()
-  return currentWorkspace ? hasKiroBuddyHooks(currentWorkspace) : false
+function shouldAutostartForRecentWorkspace() {
+  return recentWorkspacePaths().some((workspacePath) => hasKiroBuddyHooks(workspacePath))
 }
 
 function writeIdleStatus() {
@@ -117,6 +127,26 @@ function startBuddy() {
     electronBinary = require(path.join(packageRoot, 'node_modules', 'electron'))
   } catch {
     return false
+  }
+
+  if (process.platform === 'win32') {
+    const quotePowerShellString = (value) => `'${String(value).replace(/'/g, "''")}'`
+    const command = [
+      '$startInfo = New-Object System.Diagnostics.ProcessStartInfo;',
+      `$startInfo.FileName = ${quotePowerShellString(electronBinary)};`,
+      `$startInfo.Arguments = ${quotePowerShellString(`"${packageRoot}"`)};`,
+      `$startInfo.WorkingDirectory = ${quotePowerShellString(packageRoot)};`,
+      '$startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden;',
+      '$startInfo.UseShellExecute = $false;',
+      '$startInfo.EnvironmentVariables["KIRO_BUDDY_EXIT_WITH_KIRO"] = "1";',
+      '[System.Diagnostics.Process]::Start($startInfo) | Out-Null;',
+    ].join(' ')
+    const result = spawnSync(
+      'powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command],
+      { stdio: 'ignore', windowsHide: true },
+    )
+    return result.status === 0
   }
 
   const child = spawn(electronBinary, [packageRoot], {
@@ -152,7 +182,7 @@ function tick() {
     return
   }
 
-  if (!shouldAutostartForCurrentWorkspace()) {
+  if (!shouldAutostartForRecentWorkspace()) {
     return
   }
 
@@ -162,13 +192,8 @@ function tick() {
   }
 }
 
-if (process.platform !== 'darwin') {
-  console.error('Kiro Buddy autostart watcher is currently only supported on macOS.')
-  process.exit(1)
-}
-
-if (!fs.existsSync(statusHookPath)) {
-  console.error(`Missing status hook script: ${statusHookPath}`)
+if (!['darwin', 'win32'].includes(process.platform)) {
+  console.error('Kiro Buddy autostart watcher is currently supported on macOS and Windows.')
   process.exit(1)
 }
 

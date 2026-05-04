@@ -1,6 +1,6 @@
 {
   "name": "@jagatees/kiro-buddy",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Floating desktop pet overlay for Kiro agent activity",
   "main": "dist/main/main/index.js",
   "bin": {
@@ -12,6 +12,10 @@
     "scripts/kiro-status-hook.cjs",
     "scripts/kiro-status-hook.ps1",
     "scripts/install-kiro-hooks.cjs",
+    "scripts/kiro-buddy-autostart.cjs",
+    "scripts/install-autostart.cjs",
+    "scripts/install-macos-autostart.cjs",
+    "scripts/install-windows-autostart.cjs",
     "docs",
     "README.md",
     "electron-builder.config.js"
@@ -27,7 +31,7 @@
     "status:done": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/kiro-status-hook.ps1 done",
     "status:error": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/kiro-status-hook.ps1 error",
     "hooks:install": "node scripts/install-kiro-hooks.cjs",
-    "autostart:install": "node scripts/install-macos-autostart.cjs",
+    "autostart:install": "node scripts/install-autostart.cjs",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "test": "jest",
