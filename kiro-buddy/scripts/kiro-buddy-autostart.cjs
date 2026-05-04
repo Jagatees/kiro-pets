@@ -3,12 +3,21 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { fileURLToPath } = require('url')
 const { execFileSync, spawn } = require('child_process')
 
 const packageRoot = path.resolve(__dirname, '..')
 const statusHookPath = path.join(packageRoot, 'scripts', 'kiro-status-hook.cjs')
 const statusFilePath = process.env.KIRO_BUDDY_STATUS_FILE || path.join(os.homedir(), '.kiro', 'status.json')
 const pollMs = Number(process.env.KIRO_BUDDY_AUTOSTART_POLL_MS || 3000)
+const workspaceStorageDir = path.join(
+  os.homedir(),
+  'Library',
+  'Application Support',
+  'Kiro',
+  'User',
+  'workspaceStorage',
+)
 
 let sawKiroRunning = false
 let startedThisKiroSession = false
@@ -35,6 +44,61 @@ function isBuddyRunning(lines) {
     const normalized = line.toLowerCase()
     return normalized.includes(root) && normalized.includes('node_modules/electron')
   })
+}
+
+function workspacePathFromStorageFile(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8')
+    const workspace = JSON.parse(raw)
+    if (typeof workspace.folder === 'string' && workspace.folder.startsWith('file:')) {
+      return fileURLToPath(workspace.folder)
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+function recentWorkspacePaths() {
+  try {
+    return fs
+      .readdirSync(workspaceStorageDir)
+      .map((entry) => path.join(workspaceStorageDir, entry, 'workspace.json'))
+      .filter((filePath) => fs.existsSync(filePath))
+      .map((filePath) => ({
+        filePath,
+        mtimeMs: fs.statSync(filePath).mtimeMs,
+        workspacePath: workspacePathFromStorageFile(filePath),
+      }))
+      .filter((workspace) => workspace.workspacePath)
+      .sort((a, b) => b.mtimeMs - a.mtimeMs)
+      .map((workspace) => workspace.workspacePath)
+  } catch {
+    return []
+  }
+}
+
+function hasKiroBuddyHooks(workspacePath) {
+  const hookDir = path.join(workspacePath, '.kiro', 'hooks')
+  const installedScript = path.join(workspacePath, '.kiro', 'kiro-buddy', 'kiro-status-hook.cjs')
+
+  if (fs.existsSync(installedScript)) {
+    return true
+  }
+
+  try {
+    return fs
+      .readdirSync(hookDir)
+      .some((fileName) => fileName.startsWith('kiro-buddy-') && fileName.endsWith('.kiro.hook'))
+  } catch {
+    return false
+  }
+}
+
+function shouldAutostartForCurrentWorkspace() {
+  const [currentWorkspace] = recentWorkspacePaths()
+  return currentWorkspace ? hasKiroBuddyHooks(currentWorkspace) : false
 }
 
 function writeIdleStatus() {
@@ -85,6 +149,10 @@ function tick() {
   }
 
   if (startedThisKiroSession || isBuddyRunning(lines)) {
+    return
+  }
+
+  if (!shouldAutostartForCurrentWorkspace()) {
     return
   }
 
