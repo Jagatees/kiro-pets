@@ -5,11 +5,11 @@ const path = require('path')
 
 const packageRoot = path.resolve(__dirname, '..')
 
-function runNodeScript(script, args = []) {
+function runNodeScript(script, args = [], env = process.env) {
   const result = spawnSync(process.execPath, [path.join(packageRoot, script), ...args], {
     cwd: process.cwd(),
     stdio: 'inherit',
-    env: process.env,
+    env,
   })
   process.exit(result.status ?? 1)
 }
@@ -43,6 +43,7 @@ function startBuddyDetached() {
   if (process.platform === 'win32') {
     const quotePowerShellString = (value) => `'${String(value).replace(/'/g, "''")}'`
     const command = [
+      "$env:KIRO_BUDDY_EXIT_WITH_KIRO = '1';",
       `Start-Process -FilePath ${quotePowerShellString(electronBinary)}`,
       `-ArgumentList ${quotePowerShellString(packageRoot)}`,
       `-WorkingDirectory ${quotePowerShellString(packageRoot)}`,
@@ -66,7 +67,10 @@ function startBuddyDetached() {
     cwd: packageRoot,
     detached: true,
     stdio: 'ignore',
-    env: process.env,
+    env: {
+      ...process.env,
+      KIRO_BUDDY_EXIT_WITH_KIRO: '1',
+    },
     windowsHide: true,
   })
   child.unref()
@@ -100,7 +104,10 @@ switch (command) {
     break
   case 'on':
     startBuddyDetached()
-    runNodeScript('scripts/kiro-status-hook.cjs', ['idle'])
+    runNodeScript('scripts/kiro-status-hook.cjs', ['idle'], {
+      ...process.env,
+      KIRO_BUDDY_NO_AUTOSTART: '1',
+    })
     break
   case 'start':
     startBuddy()
