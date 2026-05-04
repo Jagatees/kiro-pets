@@ -119,11 +119,27 @@ const hooks = [
   },
   {
     shortName: 'kiro-buddy-waiting',
-    name: 'Kiro Buddy Waiting',
+    name: 'Kiro Buddy Waiting For Input',
     description:
-      'Automatically switches Kiro Buddy to waiting when Kiro asks the user for input.',
-    when: { type: 'preToolUse', toolTypes: ['userInput', '.*userInput.*'] },
-    command: commandFor('waiting', undefined, { delayMs: 650 }),
+      'Automatically switches Kiro Buddy to asking when Kiro waits for user approval or input.',
+    when: {
+      type: 'preToolUse',
+      toolTypes: [
+        'userInput',
+        '.*userInput.*',
+        'command',
+        'shell',
+        'terminal',
+        'powershell',
+        'bash',
+        'executeCommand',
+        'runCommand',
+        '.*command.*',
+        '.*shell.*',
+        '.*terminal.*',
+      ],
+    },
+    command: commandFor('asking', undefined, { delayMs: 650 }),
   },
   {
     shortName: 'kiro-buddy-done',
