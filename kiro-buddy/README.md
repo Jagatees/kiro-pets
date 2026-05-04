@@ -13,6 +13,11 @@ npx -y @jagatees/kiro-buddy start
 
 The install command adds Kiro Agent Hooks to your current project's `.kiro/hooks` folder and copies the small status runner to `.kiro/kiro-buddy`. Windows uses a PowerShell runner; macOS and Linux use a Node runner.
 
+After install, Kiro Buddy can start in two ways:
+
+- Automatically when a Kiro Buddy agent hook runs, such as when you submit a prompt.
+- Manually from Kiro's Agent Hooks panel by running `Kiro Buddy Start`.
+
 On macOS, the Buddy window is configured to stay visible across Spaces and fullscreen apps.
 
 ## What It Shows
