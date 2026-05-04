@@ -8,14 +8,13 @@ const { execFileSync, spawn, spawnSync } = require('child_process')
 
 const packageRoot = path.resolve(__dirname, '..')
 const statusFilePath = process.env.KIRO_BUDDY_STATUS_FILE || path.join(os.homedir(), '.kiro', 'status.json')
+const manualClosePath = path.join(os.homedir(), '.kiro-buddy', 'manual-close.json')
+const lockFilePath = path.join(os.homedir(), '.kiro-buddy', 'autostart.lock')
 const pollMs = Number(process.env.KIRO_BUDDY_AUTOSTART_POLL_MS || 3000)
 const workspaceStorageDir =
   process.platform === 'win32'
     ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Kiro', 'User', 'workspaceStorage')
     : path.join(os.homedir(), 'Library', 'Application Support', 'Kiro', 'User', 'workspaceStorage')
-
-let sawKiroRunning = false
-let startedThisKiroSession = false
 
 function processLines() {
   try {
@@ -39,6 +38,55 @@ function processLines() {
   }
 }
 
+function isPidRunning(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false
+  }
+
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function acquireLock() {
+  fs.mkdirSync(path.dirname(lockFilePath), { recursive: true })
+
+  try {
+    const existingPid = Number(fs.readFileSync(lockFilePath, 'utf8'))
+    if (isPidRunning(existingPid)) {
+      return false
+    }
+  } catch {}
+
+  try {
+    fs.writeFileSync(lockFilePath, String(process.pid), { flag: 'wx' })
+    return true
+  } catch {
+    try {
+      const existingPid = Number(fs.readFileSync(lockFilePath, 'utf8'))
+      if (isPidRunning(existingPid)) {
+        return false
+      }
+      fs.writeFileSync(lockFilePath, String(process.pid), 'utf8')
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
+function releaseLock() {
+  try {
+    const existingPid = Number(fs.readFileSync(lockFilePath, 'utf8'))
+    if (existingPid === process.pid) {
+      fs.rmSync(lockFilePath, { force: true })
+    }
+  } catch {}
+}
+
 function isKiroRunning(lines) {
   return lines.some((line) => {
     const normalized = line.toLowerCase()
@@ -52,7 +100,10 @@ function isBuddyRunning(lines) {
   const root = packageRoot.toLowerCase()
   return lines.some((line) => {
     const normalized = line.toLowerCase()
-    return normalized.includes(root) && normalized.includes('node_modules/electron')
+    return (
+      normalized.includes(root) &&
+      (normalized.includes('node_modules/electron') || normalized.includes('node_modules\\electron'))
+    )
   })
 }
 
@@ -109,6 +160,16 @@ function hasKiroBuddyHooks(workspacePath) {
 
 function shouldAutostartForRecentWorkspace() {
   return recentWorkspacePaths().some((workspacePath) => hasKiroBuddyHooks(workspacePath))
+}
+
+function clearManualCloseMarker() {
+  try {
+    fs.rmSync(manualClosePath, { force: true })
+  } catch {}
+}
+
+function wasManuallyClosed() {
+  return fs.existsSync(manualClosePath)
 }
 
 function writeIdleStatus() {
@@ -168,17 +229,11 @@ function tick() {
   const kiroRunning = isKiroRunning(lines)
 
   if (!kiroRunning) {
-    sawKiroRunning = false
-    startedThisKiroSession = false
+    clearManualCloseMarker()
     return
   }
 
-  if (!sawKiroRunning) {
-    sawKiroRunning = true
-    startedThisKiroSession = false
-  }
-
-  if (startedThisKiroSession || isBuddyRunning(lines)) {
+  if (isBuddyRunning(lines) || wasManuallyClosed()) {
     return
   }
 
@@ -188,7 +243,6 @@ function tick() {
 
   if (startBuddy()) {
     writeIdleStatus()
-    startedThisKiroSession = true
   }
 }
 
@@ -196,6 +250,14 @@ if (!['darwin', 'win32'].includes(process.platform)) {
   console.error('Kiro Buddy autostart watcher is currently supported on macOS and Windows.')
   process.exit(1)
 }
+
+if (!acquireLock()) {
+  process.exit(0)
+}
+
+process.on('exit', releaseLock)
+process.on('SIGINT', () => process.exit(0))
+process.on('SIGTERM', () => process.exit(0))
 
 tick()
 setInterval(tick, pollMs)

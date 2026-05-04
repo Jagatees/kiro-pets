@@ -40,12 +40,29 @@ function isWatcherRunning() {
   }
 }
 
+function stopExistingWatchers() {
+  try {
+    const escaped = watcherPath.replace(/'/g, "''")
+    const command = [
+      'Get-CimInstance Win32_Process',
+      `| Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*${escaped}*' }`,
+      '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }',
+    ].join(' ')
+    execFileSync('powershell.exe', ['-NoProfile', '-Command', command], {
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+  } catch {}
+}
+
 function startWatcherNow() {
+  stopExistingWatchers()
   if (isWatcherRunning()) {
     return
   }
 
   const child = spawn(nodePath, [watcherPath], {
+    cwd: packageRoot,
     detached: true,
     stdio: 'ignore',
     windowsHide: true,

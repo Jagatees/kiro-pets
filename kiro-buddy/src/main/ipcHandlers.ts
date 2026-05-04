@@ -1,6 +1,11 @@
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import { app, ipcMain, screen } from 'electron'
 import { overlayWindow } from './overlayWindow'
 import { getConfig } from './configStore'
+
+const manualClosePath = path.join(os.homedir(), '.kiro-buddy', 'manual-close.json')
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, max))
@@ -45,6 +50,8 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.on('close-app', () => {
+    fs.mkdirSync(path.dirname(manualClosePath), { recursive: true })
+    fs.writeFileSync(manualClosePath, `${JSON.stringify({ timestamp: Date.now() })}\n`, 'utf8')
     app.quit()
   })
 }
