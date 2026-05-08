@@ -2,6 +2,10 @@
 
 Kiro Buddy is a floating desktop pet for Kiro agent activity. It reacts when Kiro starts working, asks for input, finishes, errors, or moves through spec-driven phases like Design, Requirements, and Task List.
 
+## Demo
+
+<video src="docs/assets/kiro-buddy-demo.mp4" controls muted loop playsinline></video>
+
 ## Install In Any Kiro Project
 
 Open a terminal in your Kiro project and run:

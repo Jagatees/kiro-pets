@@ -2,6 +2,10 @@
 
 Kiro Buddy shows a floating pet for agent activity. Kiro Buddy reacts to Kiro agent activity.
 
+## Demo
+
+<video src="kiro-buddy/docs/assets/kiro-buddy-demo.mp4" controls muted loop playsinline></video>
+
 ## Use In Any Kiro Project
 
 After `@jagatees/kiro-buddy` is published, a user can open any Kiro project and run:
