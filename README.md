@@ -1,4 +1,4 @@
-# kiro-pets
+# kiro-buddy
 
 Kiro Buddy shows a floating pet for agent activity. Kiro Buddy reacts to Kiro agent activity.
 
