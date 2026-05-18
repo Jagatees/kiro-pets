@@ -206,6 +206,13 @@ class StatusManagerImpl {
   }
 
   /**
+   * Returns the watched status file path, when initialized.
+   */
+  getStatusFilePath(): string | null {
+    return this.filePath
+  }
+
+  /**
    * Reads, parses, validates, debounces, and dispatches a status update.
    *
    * Design pseudocode:

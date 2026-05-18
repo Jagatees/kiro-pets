@@ -3,6 +3,25 @@
  */
 
 import { SpriteAnimationRenderer } from '../../src/renderer/animationRenderer'
+import fs from 'fs'
+import path from 'path'
+import type { AnimationKey } from '../../src/shared/types'
+
+const projectRoot = path.resolve(__dirname, '..', '..')
+const animationKeys: AnimationKey[] = [
+  'idle',
+  'working',
+  'waiting',
+  'asking',
+  'done',
+  'error',
+  'design-working',
+  'requirements-working',
+  'tasks-working',
+  'design-done',
+  'requirements-done',
+  'tasks-done',
+]
 
 describe('SpriteAnimationRenderer', () => {
   let container: HTMLElement
@@ -76,5 +95,27 @@ describe('SpriteAnimationRenderer', () => {
     jest.advanceTimersByTime(83 * 12 * 3)
 
     expect(onComplete).not.toHaveBeenCalled()
+  })
+
+  it.each(animationKeys)('has all sprite frames for %s', (key) => {
+    for (let frameIndex = 0; frameIndex < 12; frameIndex += 1) {
+      const framePath = path.join(
+        projectRoot,
+        'assets',
+        'pet',
+        key,
+        `${key}_${String(frameIndex).padStart(3, '0')}.png`,
+      )
+
+      expect(fs.existsSync(framePath)).toBe(true)
+    }
+  })
+
+  it.each(animationKeys)('plays the first frame for %s', (key) => {
+    renderer.play({ key, loop: true, speed: 1 })
+
+    const image = container.querySelector('img')
+    expect(image?.getAttribute('src')).toBe(`../assets/pet/${key}/${key}_000.png`)
+    expect(renderer.getCurrentAnimation()).toBe(key)
   })
 })

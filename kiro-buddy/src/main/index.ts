@@ -12,8 +12,8 @@ function createOverlayConfig(): OverlayWindowConfig {
   const config = getConfig()
 
   return {
-    width: Math.max(config.window.width, 220),
-    height: Math.max(config.window.height, 220),
+    width: Math.max(config.window.width, 360),
+    height: Math.max(config.window.height, 300),
     x: config.window.x,
     y: config.window.y,
     alwaysOnTop: true,

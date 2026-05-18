@@ -47,6 +47,31 @@ export interface StatusPayload {
   message: string    // Human-readable description, max 120 chars
   timestamp: number  // Unix epoch milliseconds
   phase?: SpecPhase   // Optional Kiro spec phase context
+  context?: string     // Optional active prompt/file/task context
+}
+
+/**
+ * Debug snapshot shown in the optional in-app panel.
+ */
+export interface KiroBuddyDebugInfo {
+  status: AgentStatus
+  message: string
+  timestamp: number
+  statusFilePath: string
+  phase?: SpecPhase
+  context?: string
+  lastSlashCommand?: string
+  lastSlashCommandAt?: number
+  replyHistory?: string[]
+  automationStatus?: string
+}
+
+/**
+ * Result returned by reply/copy IPC actions.
+ */
+export interface KiroBuddyReplyResult {
+  ok: boolean
+  message: string
 }
 
 // ---------------------------------------------------------------------------
@@ -60,8 +85,8 @@ export interface AppConfig {
   window: {
     x: number       // Last known x position, default: 100
     y: number       // Last known y position, default: 100
-    width: number   // Fixed: 120
-    height: number  // Fixed: 120
+    width: number   // Default: 360
+    height: number  // Default: 300
   }
   statusFilePath: string  // Absolute path to status.json
   notifications: NotificationConfig
@@ -73,8 +98,8 @@ export interface AppConfig {
  * Configuration for the Electron BrowserWindow overlay
  */
 export interface OverlayWindowConfig {
-  width: number        // default: 120
-  height: number       // default: 120
+  width: number        // default: 360
+  height: number       // default: 300
   x: number            // last saved x position
   y: number            // last saved y position
   alwaysOnTop: boolean // default: true

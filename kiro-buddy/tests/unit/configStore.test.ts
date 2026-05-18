@@ -88,10 +88,10 @@ describe('configStore — default values (Req 9.5)', () => {
     expect(config.window.y).toBe(100)
   })
 
-  it('returns default window dimensions of 120x120', () => {
+  it('returns default window dimensions for the pet panel', () => {
     const config = getConfig()
-    expect(config.window.width).toBe(120)
-    expect(config.window.height).toBe(120)
+    expect(config.window.width).toBe(360)
+    expect(config.window.height).toBe(300)
   })
 
   it('returns notifications enabled by default', () => {

@@ -200,7 +200,9 @@ function installWorkspaceTrustedCommand() {
     ? settings['kiroAgent.trustedCommands']
     : []
 
-  const nextTrustedCommands = [...current]
+  const nextTrustedCommands = current.filter(
+    (command) => !command.includes(statusHookPath) && !command.includes(cliPath),
+  )
   for (const command of [
     trustedPrefix,
     trustedControlPrefix,
@@ -211,7 +213,7 @@ function installWorkspaceTrustedCommand() {
     }
   }
 
-  if (nextTrustedCommands.length !== current.length) {
+  if (JSON.stringify(nextTrustedCommands) !== JSON.stringify(current)) {
     settings['kiroAgent.trustedCommands'] = nextTrustedCommands
     fs.mkdirSync(path.dirname(vscodeSettingsPath), { recursive: true })
     fs.writeFileSync(vscodeSettingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8')
@@ -343,6 +345,12 @@ const writtenAgents = [
     'Close Kiro Buddy from the slash command box.',
     'close',
     'Kiro Buddy closed.',
+  ),
+  writeAgent(
+    'buddy-test',
+    'Run Kiro Buddy visual test mode from the slash command box.',
+    'test',
+    'Kiro Buddy visual test started.',
   ),
 ]
 

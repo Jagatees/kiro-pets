@@ -8,7 +8,7 @@
  */
 
 import path from 'path'
-import { BrowserWindow, app } from 'electron'
+import { BrowserWindow, app, type BrowserWindowConstructorOptions } from 'electron'
 import { getConfig, setWindowPosition } from './configStore'
 import type { OverlayWindowConfig } from '../shared/types'
 
@@ -57,6 +57,21 @@ export function configureMacFullscreenOverlay(
 
   if (typeof window.setAlwaysOnTop === 'function') {
     window.setAlwaysOnTop(true, 'screen-saver', 1)
+  }
+}
+
+export function macFullscreenOverlayOptions(
+  platform: NodeJS.Platform = process.platform,
+): BrowserWindowConstructorOptions {
+  if (platform !== 'darwin') {
+    return {}
+  }
+
+  return {
+    type: 'panel',
+    show: false,
+    fullscreenable: false,
+    hiddenInMissionControl: true,
   }
 }
 
@@ -115,6 +130,7 @@ function createWithRetry(config: OverlayWindowConfig, attempt: number = 1): void
       transparent: config.transparent,
       frame: config.frame,
       skipTaskbar: config.skipTaskbar,
+      ...macFullscreenOverlayOptions(),
       webPreferences: {
         contextIsolation: true,   // Requirement 11.1
         nodeIntegration: false,   // Requirement 11.1
@@ -220,6 +236,11 @@ export const overlayWindow = {
   show(): void {
     if (!win) {
       console.warn('[OverlayWindow] show called before window was created')
+      return
+    }
+    if (process.platform === 'darwin' && typeof win.showInactive === 'function') {
+      win.showInactive()
+      enforceTopMost(win)
       return
     }
     win.show()

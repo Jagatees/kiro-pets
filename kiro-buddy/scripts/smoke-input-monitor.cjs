@@ -5,8 +5,16 @@ const { execFileSync } = require('child_process')
 
 const statusFilePath = process.env.KIRO_BUDDY_STATUS_FILE || path.join(os.homedir(), '.kiro', 'status.json')
 const workspaceRoot = path.resolve(process.env.KIRO_BUDDY_WORKSPACE || path.join(__dirname, '..', '..'))
-const statusHookPath = path.join(workspaceRoot, '.kiro', 'kiro-buddy', 'kiro-status-hook.ps1')
-const kiroLogRoot = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Kiro', 'logs')
+const isWindows = process.platform === 'win32'
+const statusHookPath = path.join(
+  workspaceRoot,
+  '.kiro',
+  'kiro-buddy',
+  isWindows ? 'kiro-status-hook.ps1' : 'kiro-status-hook.cjs',
+)
+const kiroLogRoot = isWindows
+  ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Kiro', 'logs')
+  : path.join(os.homedir(), 'Library', 'Application Support', 'Kiro', 'logs')
 
 function walk(dir, files = []) {
   let entries
@@ -40,7 +48,11 @@ function readStatus() {
 
 if (!fs.existsSync(statusHookPath)) {
   console.error(`Missing installed Kiro Buddy hook script: ${statusHookPath}`)
-  console.error('Run: $env:KIRO_BUDDY_WORKSPACE="D:\\Github-Local\\kiro-pets"; npm run hooks:install')
+  console.error(
+    isWindows
+      ? 'Run: $env:KIRO_BUDDY_WORKSPACE="D:\\Github-Local\\kiro-pets"; npm run hooks:install'
+      : 'Run: KIRO_BUDDY_WORKSPACE="/path/to/your/kiro-project" npm run hooks:install',
+  )
   process.exit(1)
 }
 
@@ -50,11 +62,20 @@ if (!logPath) {
   process.exit(1)
 }
 
-execFileSync(
-  'powershell.exe',
-  ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', statusHookPath, 'working'],
-  { stdio: 'inherit' },
-)
+function runStatusHook(args) {
+  if (isWindows) {
+    execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', statusHookPath, ...args],
+      { stdio: 'inherit' },
+    )
+    return
+  }
+
+  execFileSync(process.execPath, [statusHookPath, ...args], { stdio: 'inherit' })
+}
+
+runStatusHook(['working'])
 
 const afterWorking = readStatus()
 if (afterWorking.status !== 'working') {
@@ -110,20 +131,7 @@ if (!waitForStatus('asking')) {
   process.exit(1)
 }
 
-execFileSync(
-  'powershell.exe',
-  [
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    statusHookPath,
-    'working',
-    'tasks',
-    '--require-phase',
-  ],
-  { stdio: 'inherit' },
-)
+runStatusHook(['working', 'tasks', '--require-phase'])
 
 const afterSpecActivity = readStatus()
 if (afterSpecActivity.status !== 'asking') {

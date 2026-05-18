@@ -7,6 +7,45 @@ const path = require('path')
 
 const packageRoot = path.resolve(__dirname, '..')
 const manualClosePath = path.join(os.homedir(), '.kiro-buddy', 'manual-close.json')
+const lastCommandPath = path.join(os.homedir(), '.kiro-buddy', 'last-command.json')
+const launchRequestPath = path.join(os.homedir(), '.kiro-buddy', 'last-launch.json')
+
+function appDataDir() {
+  return path.dirname(manualClosePath)
+}
+
+function writeLastCommand(command) {
+  try {
+    fs.mkdirSync(appDataDir(), { recursive: true })
+    fs.writeFileSync(
+      lastCommandPath,
+      `${JSON.stringify({ command, timestamp: Date.now() })}\n`,
+      'utf8',
+    )
+  } catch {}
+}
+
+function writeLaunchRequest(command) {
+  fs.mkdirSync(appDataDir(), { recursive: true })
+  fs.writeFileSync(
+    launchRequestPath,
+    `${JSON.stringify({ command, timestamp: Date.now(), packageRoot })}\n`,
+    'utf8',
+  )
+}
+
+function resolveElectronBinary() {
+  if (process.env.KIRO_BUDDY_ELECTRON_PATH) {
+    return process.env.KIRO_BUDDY_ELECTRON_PATH
+  }
+
+  try {
+    return require('electron')
+  } catch {
+    console.error('Electron is missing. Reinstall kiro-buddy and try again.')
+    process.exit(1)
+  }
+}
 
 function runNodeScript(script, args = [], env = process.env) {
   const result = spawnSync(process.execPath, [path.join(packageRoot, script), ...args], {
@@ -17,14 +56,16 @@ function runNodeScript(script, args = [], env = process.env) {
   process.exit(result.status ?? 1)
 }
 
+function runNodeScriptReturning(script, args = [], env = process.env) {
+  return spawnSync(process.execPath, [path.join(packageRoot, script), ...args], {
+    cwd: process.cwd(),
+    stdio: 'inherit',
+    env,
+  })
+}
+
 function startBuddy() {
-  let electronBinary
-  try {
-    electronBinary = require('electron')
-  } catch {
-    console.error('Electron is missing. Reinstall kiro-buddy and try again.')
-    process.exit(1)
-  }
+  const electronBinary = resolveElectronBinary()
 
   const result = spawnSync(electronBinary, [packageRoot], {
     cwd: packageRoot,
@@ -34,16 +75,17 @@ function startBuddy() {
   process.exit(result.status ?? 1)
 }
 
-function startBuddyDetached() {
+function startBuddyDetached(commandName = 'buddy-open') {
+  writeLastCommand(commandName)
   clearManualCloseMarker()
+  writeLaunchRequest(commandName)
 
-  let electronBinary
-  try {
-    electronBinary = require('electron')
-  } catch {
-    console.error('Electron is missing. Reinstall kiro-buddy and try again.')
-    process.exit(1)
+  if (process.env.KIRO_BUDDY_DRY_RUN === '1') {
+    console.log(`Kiro Buddy: open requested (${commandName})`)
+    return
   }
+
+  const electronBinary = resolveElectronBinary()
 
   if (process.platform === 'win32') {
     const quotePowerShellString = (value) => `'${String(value).replace(/'/g, "''")}'`
@@ -119,7 +161,7 @@ function currentKiroSignature() {
 }
 
 function writeManualCloseMarker() {
-  fs.mkdirSync(path.dirname(manualClosePath), { recursive: true })
+  fs.mkdirSync(appDataDir(), { recursive: true })
   fs.writeFileSync(
     manualClosePath,
     `${JSON.stringify({ timestamp: Date.now(), kiroSignature: currentKiroSignature() })}\n`,
@@ -128,7 +170,13 @@ function writeManualCloseMarker() {
 }
 
 function closeBuddy() {
+  writeLastCommand('buddy-close')
   writeManualCloseMarker()
+
+  if (process.env.KIRO_BUDDY_DRY_RUN === '1') {
+    console.log('Kiro Buddy: close requested')
+    process.exit(0)
+  }
 
   if (process.platform === 'win32') {
     const escapedRoot = packageRoot.replace(/'/g, "''")
@@ -144,10 +192,77 @@ function closeBuddy() {
     process.exit(result.status ?? 1)
   }
 
-  const result = spawnSync('pkill', ['-f', `${packageRoot}.*electron`], {
-    stdio: 'inherit',
-  })
+  const result = spawnSync('pkill', ['-f', packageRoot], { stdio: 'inherit' })
   process.exit(result.status === 1 ? 0 : (result.status ?? 1))
+}
+
+function writeStatus(status, phase, message, context) {
+  const env = {
+    ...process.env,
+    KIRO_BUDDY_NO_AUTOSTART: '1',
+  }
+  if (message) {
+    env.KIRO_BUDDY_MESSAGE = message
+  }
+  if (context) {
+    env.KIRO_BUDDY_CONTEXT = context
+  }
+  const args = [path.join(packageRoot, 'scripts', 'kiro-status-hook.cjs'), status]
+  if (phase) {
+    args.push(phase)
+  }
+  spawnSync(process.execPath, args, {
+    cwd: process.cwd(),
+    stdio: 'ignore',
+    env,
+  })
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+function runTestSequence() {
+  const steps = [
+    ['idle', null, 'Visual test: idle', 'ready check'],
+    ['working', null, 'Visual test: working', 'general work'],
+    ['done', null, 'Visual test: done', 'completion check'],
+    ['working', 'design', 'Visual test: design', 'design.md'],
+    ['done', 'design', 'Visual test: design done', 'design.md'],
+    ['working', 'requirements', 'Visual test: requirements', 'requirements.md'],
+    ['done', 'requirements', 'Visual test: requirements done', 'requirements.md'],
+    ['working', 'tasks', 'Visual test: tasks', 'tasks.md'],
+    ['done', 'tasks', 'Visual test: tasks done', 'tasks.md'],
+    ['working', null, 'Visual test: input flow', 'input setup'],
+    ['waiting', null, 'Visual test: waiting', 'input wait'],
+    ['working', null, 'Visual test: resumed', 'input resumed'],
+    ['asking', null, 'Visual test: asking', 'approval prompt'],
+    ['error', null, 'Visual test: error', 'error check'],
+    ['idle', null, 'Visual test complete', 'ready check'],
+  ]
+  for (const [status, phase, message, context] of steps) {
+    writeStatus(status, phase, message, context)
+    sleep(900)
+  }
+}
+
+function startVisualTest() {
+  startBuddyDetached('buddy-test')
+  if (process.env.KIRO_BUDDY_DRY_RUN === '1') {
+    return
+  }
+
+  const child = spawn(process.execPath, [__filename, 'run-test-sequence'], {
+    cwd: process.cwd(),
+    detached: true,
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      KIRO_BUDDY_NO_AUTOSTART: '1',
+    },
+    windowsHide: true,
+  })
+  child.unref()
 }
 
 function printHelp() {
@@ -157,10 +272,12 @@ Usage:
   kiro-buddy install        Install Kiro hooks into the current workspace
   kiro-buddy open           Open Kiro Buddy and switch to idle
   kiro-buddy close          Close Kiro Buddy until opened again
+  kiro-buddy test           Cycle all Buddy visual states
   kiro-buddy on             Alias for open
   kiro-buddy off            Alias for close
   kiro-buddy start          Start the floating Buddy app
   kiro-buddy status <state> Write a status update manually
+  kiro-buddy cli <command>  Kiro CLI helpers: install, open, close, test, status
 
 States:
   idle, working, asking, done, error
@@ -170,6 +287,7 @@ Examples:
   npx -y kiro-buddy install
   npx -y kiro-buddy open
   npx -y kiro-buddy close
+  npx -y kiro-buddy test
   npx -y kiro-buddy start
   npx -y kiro-buddy status working design
 `)
@@ -177,9 +295,64 @@ Examples:
 
 const [command, ...args] = process.argv.slice(2)
 
+function handleCliCommand(args) {
+  const [subcommand, ...rest] = args
+
+  switch (subcommand) {
+    case 'install':
+    case 'hooks':
+      process.exit(
+        runNodeScriptReturning('scripts/install-kiro-cli-hooks.cjs', rest, process.env).status ?? 1,
+      )
+      break
+    case 'open':
+    case 'on':
+      startBuddyDetached('buddy-cli-open')
+      runNodeScript('scripts/kiro-status-hook.cjs', ['idle'], {
+        ...process.env,
+        KIRO_BUDDY_NO_AUTOSTART: '1',
+      })
+      break
+    case 'close':
+    case 'off':
+      closeBuddy()
+      break
+    case 'test':
+    case 'visual-test':
+      startVisualTest()
+      break
+    case 'status':
+      runNodeScript('scripts/kiro-status-hook.cjs', rest)
+      break
+    case undefined:
+    case 'help':
+    case '--help':
+    case '-h':
+      console.log(`Kiro Buddy CLI helpers
+
+Usage:
+  kiro-buddy cli install          Install Kiro CLI agent hooks
+  kiro-buddy cli open             Open Buddy for terminal sessions
+  kiro-buddy cli close            Close Buddy
+  kiro-buddy cli test             Cycle visual states
+  kiro-buddy cli status working   Write a status update
+
+After install:
+  kiro-cli --agent kiro-buddy-cli
+`)
+      break
+    default:
+      console.error(`Unknown cli command: ${subcommand}`)
+      process.exit(1)
+  }
+}
+
 switch (command) {
   case 'install':
     runNodeScript('scripts/install-kiro-hooks.cjs', args)
+    break
+  case 'cli':
+    handleCliCommand(args)
     break
   case 'open':
   case 'on':
@@ -192,6 +365,13 @@ switch (command) {
   case 'close':
   case 'off':
     closeBuddy()
+    break
+  case 'test':
+  case 'visual-test':
+    startVisualTest()
+    break
+  case 'run-test-sequence':
+    runTestSequence()
     break
   case 'start':
     startBuddy()

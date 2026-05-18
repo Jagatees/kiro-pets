@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { StatusPayload } from '../shared/types'
+import type { KiroBuddyDebugInfo, KiroBuddyReplyResult, StatusPayload } from '../shared/types'
 
 type StatusUpdateHandler = (payload: StatusPayload) => void
 
@@ -19,5 +19,17 @@ contextBridge.exposeInMainWorld('kiroBuddy', {
 
   closeApp(): void {
     ipcRenderer.send('close-app')
+  },
+
+  getDebugInfo(): Promise<KiroBuddyDebugInfo> {
+    return ipcRenderer.invoke('get-debug-info')
+  },
+
+  copyReply(text: string): Promise<KiroBuddyReplyResult> {
+    return ipcRenderer.invoke('copy-reply', text)
+  },
+
+  replyToKiro(text: string): Promise<KiroBuddyReplyResult> {
+    return ipcRenderer.invoke('reply-to-kiro', text)
   },
 })

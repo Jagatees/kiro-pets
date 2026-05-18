@@ -65,5 +65,12 @@ export function validateStatusPayload(payload: unknown): payload is StatusPayloa
     }
   }
 
+  // --- optional context field ---
+  if (p['context'] !== undefined) {
+    if (typeof p['context'] !== 'string' || p['context'].length > MESSAGE_MAX_CHARS) {
+      return false
+    }
+  }
+
   return true
 }

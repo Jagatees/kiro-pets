@@ -162,6 +162,25 @@ describe('overlayWindow.create — window properties (Req 1.1)', () => {
     })
     expect(macWindow.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver', 1)
   })
+
+  it('uses macOS panel options for fullscreen overlays', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { macFullscreenOverlayOptions } = require('../../src/main/overlayWindow')
+
+    expect(macFullscreenOverlayOptions('darwin')).toEqual({
+      type: 'panel',
+      show: false,
+      fullscreenable: false,
+      hiddenInMissionControl: true,
+    })
+  })
+
+  it('does not apply macOS panel options on other platforms', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { macFullscreenOverlayOptions } = require('../../src/main/overlayWindow')
+
+    expect(macFullscreenOverlayOptions('win32')).toEqual({})
+  })
 })
 
 // ---------------------------------------------------------------------------

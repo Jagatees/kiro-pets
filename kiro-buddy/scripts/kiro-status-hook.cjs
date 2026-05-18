@@ -5,6 +5,7 @@ const { execFileSync, spawn } = require('child_process')
 
 const VALID_STATUSES = new Set(['idle', 'working', 'waiting', 'asking', 'done', 'error'])
 const VALID_PHASES = new Set(['design', 'requirements', 'tasks'])
+const manualClosePath = path.join(os.homedir(), '.kiro-buddy', 'manual-close.json')
 const args = process.argv.slice(2)
 const DEFAULT_MESSAGES = {
   idle: 'Kiro is ready',
@@ -167,6 +168,10 @@ function maybeStartBuddyApp() {
     return
   }
 
+  try {
+    fs.rmSync(manualClosePath, { force: true })
+  } catch {}
+
   let electronBinary
   try {
     electronBinary = require(path.join(packageRoot, 'node_modules', 'electron'))
@@ -245,6 +250,10 @@ function messageFor(status, event, phase) {
     return `Prompt: ${process.env.USER_PROMPT}`
   }
 
+  if (event && status === 'working' && typeof event.prompt === 'string') {
+    return `Prompt: ${event.prompt}`
+  }
+
   if (phase && status === 'working') {
     return `${PHASE_TITLES[phase]} in progress`
   }
@@ -264,6 +273,11 @@ function messageFor(status, event, phase) {
 
 function truncateMessage(message) {
   return String(message).replace(/\s+/g, ' ').trim().slice(0, 120) || DEFAULT_MESSAGES.idle
+}
+
+function truncateOptionalText(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  return text ? text.slice(0, 120) : null
 }
 
 function phaseFromText(text) {
@@ -315,6 +329,61 @@ function phaseFor(status, event, statusFilePath) {
 
   if (status === 'done' || status === 'error') {
     return readExistingPhase(statusFilePath)
+  }
+
+  return null
+}
+
+function basenameIfPath(value) {
+  const text = String(value || '').trim()
+  if (!text) {
+    return null
+  }
+
+  if (/[\\/]/.test(text)) {
+    return path.basename(text)
+  }
+
+  return text
+}
+
+function contextFor(event) {
+  const explicit = truncateOptionalText(process.env.KIRO_BUDDY_CONTEXT)
+  if (explicit) {
+    return explicit
+  }
+
+  const fileContext = [
+    process.env.KIRO_ACTIVE_FILE,
+    process.env.KIRO_FILE,
+    process.env.ACTIVE_FILE,
+    process.env.CURRENT_FILE,
+    process.env.WORKSPACE_FILE,
+  ]
+    .map(basenameIfPath)
+    .find(Boolean)
+  if (fileContext) {
+    return truncateOptionalText(fileContext)
+  }
+
+  if (process.env.USER_PROMPT) {
+    return truncateOptionalText(`Prompt: ${process.env.USER_PROMPT}`)
+  }
+
+  if (event && typeof event === 'object') {
+    const record = event
+    if (typeof record.prompt === 'string') {
+      return truncateOptionalText(`Prompt: ${record.prompt}`)
+    }
+
+    const eventContext =
+      record.file_path ||
+      record.filePath ||
+      record.path ||
+      record.relative_path ||
+      record.tool_name ||
+      record.hook_event_name
+    return truncateOptionalText(basenameIfPath(eventContext))
   }
 
   return null
@@ -385,6 +454,10 @@ async function main() {
   }
   if (phase) {
     payload.phase = phase
+  }
+  const context = contextFor(event)
+  if (context) {
+    payload.context = context
   }
 
   fs.mkdirSync(dir, { recursive: true })

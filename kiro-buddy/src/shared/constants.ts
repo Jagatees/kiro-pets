@@ -39,7 +39,7 @@ export const MESSAGE_MAX_CHARS = 120
 export const STATE_TO_ANIMATION_MAP: Record<PetState, AnimationKey> = {
   idle: 'idle',
   working: 'working',
-  waiting: 'asking',
+  waiting: 'waiting',
   asking: 'asking',
   done: 'done',
   error: 'error',
@@ -56,7 +56,7 @@ export const STATE_TO_ANIMATION_MAP: Record<PetState, AnimationKey> = {
 export const STATE_TITLES: Record<PetState, string> = {
   idle: 'Kiro is ready',
   working: 'Kiro is working',
-  waiting: 'Kiro is asking for input',
+  waiting: 'Kiro is waiting for input',
   asking: 'Kiro is asking for input',
   done: 'Kiro is done',
   error: 'Kiro encountered an error',

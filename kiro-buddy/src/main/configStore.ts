@@ -59,8 +59,8 @@ const DEFAULT_CONFIG: AppConfigSchema = {
   window: {
     x:      100,
     y:      100,
-    width:  120,
-    height: 120,
+    width:  360,
+    height: 300,
   },
   statusFilePath: path.join(os.homedir(), '.kiro', 'status.json'),
   notifications: {
