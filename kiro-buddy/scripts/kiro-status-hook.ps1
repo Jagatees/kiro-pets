@@ -53,6 +53,60 @@ function Get-InstallMetadata {
   }
 }
 
+function ConvertTo-EventObject([string] $RawText) {
+  if ([string]::IsNullOrWhiteSpace($RawText)) {
+    return $null
+  }
+
+  try {
+    return $RawText | ConvertFrom-Json
+  } catch {
+    return $null
+  }
+}
+
+function Get-EventValue($Event, [string[]] $Names) {
+  if ($null -eq $Event) {
+    return $null
+  }
+
+  foreach ($name in $Names) {
+    if ($Event.PSObject.Properties.Name -contains $name) {
+      $value = $Event.$name
+      if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) {
+        return [string]$value
+      }
+    }
+  }
+
+  return $null
+}
+
+function Get-TruncatedText([string] $Value) {
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $null
+  }
+
+  $text = ($Value -replace "\s+", " ").Trim()
+  if ($text.Length -gt 120) {
+    return $text.Substring(0, 120)
+  }
+
+  return $text
+}
+
+function Get-BasenameIfPath([string] $Value) {
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $null
+  }
+
+  if ($Value -match "[\\/]") {
+    return Split-Path -Leaf $Value
+  }
+
+  return $Value
+}
+
 function Test-KiroBuddyRunning([string] $PackageRoot) {
   try {
     $escapedRoot = [Regex]::Escape($PackageRoot)
@@ -107,6 +161,28 @@ if ([string]::IsNullOrWhiteSpace($statusFilePath)) {
   $statusFilePath = Join-Path $env:USERPROFILE ".kiro\status.json"
 }
 
+$stdinText = ""
+if ($env:KIRO_BUDDY_READ_STDIN -eq "1" -or $Flags -contains "--read-stdin") {
+  try {
+    $stdinTask = [Console]::In.ReadToEndAsync()
+    $timeoutMs = 100
+    if (-not [string]::IsNullOrWhiteSpace($env:KIRO_BUDDY_STDIN_TIMEOUT_MS)) {
+      $timeoutMs = [int]$env:KIRO_BUDDY_STDIN_TIMEOUT_MS
+    }
+
+    if ($stdinTask.Wait($timeoutMs)) {
+      $stdinText = [string]$stdinTask.Result
+    }
+  } catch {
+    $stdinText = ""
+  }
+}
+
+$event = ConvertTo-EventObject $env:KIRO_BUDDY_EVENT_JSON
+if ($null -eq $event) {
+  $event = ConvertTo-EventObject $stdinText
+}
+
 $delayMsText = Get-FlagValue "--delay-ms="
 if (-not [string]::IsNullOrWhiteSpace($delayMsText)) {
   $delayMs = [int]$delayMsText
@@ -132,6 +208,24 @@ if (-not [string]::IsNullOrWhiteSpace($delayMsText)) {
 $message = $env:KIRO_BUDDY_MESSAGE
 if ([string]::IsNullOrWhiteSpace($message) -and $Status -eq "working" -and -not [string]::IsNullOrWhiteSpace($env:USER_PROMPT)) {
   $message = "Prompt: $env:USER_PROMPT"
+}
+if ([string]::IsNullOrWhiteSpace($message) -and $Status -eq "working") {
+  $eventPrompt = Get-EventValue $event @("prompt")
+  if ($eventPrompt) {
+    $message = "Prompt: $eventPrompt"
+  }
+}
+if ([string]::IsNullOrWhiteSpace($message) -and $Status -eq "working") {
+  $toolName = Get-EventValue $event @("tool_name", "toolName", "tool")
+  if ($toolName) {
+    $message = "Using $toolName"
+  }
+}
+if ([string]::IsNullOrWhiteSpace($message) -and $Status -eq "done") {
+  $hookEventName = Get-EventValue $event @("hook_event_name", "hookEventName")
+  if ($hookEventName) {
+    $message = "Completed $hookEventName"
+  }
 }
 
 if ([string]::IsNullOrWhiteSpace($message)) {
@@ -162,24 +256,10 @@ $phaseCandidates = @(
   $env:KIRO_FILE,
   $env:ACTIVE_FILE,
   $env:CURRENT_FILE,
-  $env:WORKSPACE_FILE
+  $env:WORKSPACE_FILE,
+  $env:KIRO_BUDDY_EVENT_JSON,
+  $stdinText
 ) -join " "
-
-if ($env:KIRO_BUDDY_READ_STDIN -eq "1" -or $Flags -contains "--read-stdin") {
-  try {
-    $stdinTask = [Console]::In.ReadToEndAsync()
-    $timeoutMs = 100
-    if (-not [string]::IsNullOrWhiteSpace($env:KIRO_BUDDY_STDIN_TIMEOUT_MS)) {
-      $timeoutMs = [int]$env:KIRO_BUDDY_STDIN_TIMEOUT_MS
-    }
-
-    if ($stdinTask.Wait($timeoutMs)) {
-      $phaseCandidates = "$phaseCandidates $($stdinTask.Result)"
-    }
-  } catch {
-    $phaseCandidates = $phaseCandidates
-  }
-}
 
 $resolvedPhase = $null
 if ($Phase -ne "auto") {
@@ -224,7 +304,8 @@ if (
   $resolvedPhase -and
   $Status -eq "working" -and
   [string]::IsNullOrWhiteSpace($env:KIRO_BUDDY_MESSAGE) -and
-  [string]::IsNullOrWhiteSpace($env:USER_PROMPT)
+  [string]::IsNullOrWhiteSpace($env:USER_PROMPT) -and
+  $message -eq $defaultMessages[$Status]
 ) {
   $message = "$($phaseTitles[$resolvedPhase]) in progress"
 }
@@ -237,6 +318,36 @@ $payload = [ordered]@{
 
 if ($resolvedPhase) {
   $payload.phase = $resolvedPhase
+}
+
+$context = Get-TruncatedText $env:KIRO_BUDDY_CONTEXT
+if (-not $context) {
+  $fileContext = @(
+    $env:KIRO_ACTIVE_FILE,
+    $env:KIRO_FILE,
+    $env:ACTIVE_FILE,
+    $env:CURRENT_FILE,
+    $env:WORKSPACE_FILE
+  ) | ForEach-Object { Get-BasenameIfPath $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
+  $context = Get-TruncatedText $fileContext
+}
+if (-not $context -and -not [string]::IsNullOrWhiteSpace($env:USER_PROMPT)) {
+  $context = Get-TruncatedText "Prompt: $env:USER_PROMPT"
+}
+if (-not $context) {
+  $eventPrompt = Get-EventValue $event @("prompt")
+  if ($eventPrompt) {
+    $context = Get-TruncatedText "Prompt: $eventPrompt"
+  }
+}
+if (-not $context) {
+  $eventContext = Get-EventValue $event @("file_path", "filePath", "path", "relative_path", "tool_name", "toolName", "tool", "hook_event_name", "hookEventName")
+  if ($eventContext) {
+    $context = Get-TruncatedText (Get-BasenameIfPath $eventContext)
+  }
+}
+if ($context) {
+  $payload.context = $context
 }
 
 $directory = Split-Path -Parent $statusFilePath

@@ -70,10 +70,21 @@ describe('platform script compatibility', () => {
         fs.readFileSync(path.join(tempDir, '.kiro', 'hooks', 'kiro-buddy-working.kiro.hook'), 'utf8'),
       )
       const command = workingHook.then.command as string
+      const openHook = JSON.parse(
+        fs.readFileSync(path.join(tempDir, '.kiro', 'hooks', 'kiro-buddy-on.kiro.hook'), 'utf8'),
+      )
+      const askingHook = JSON.parse(
+        fs.readFileSync(path.join(tempDir, '.kiro', 'hooks', 'kiro-buddy-waiting.kiro.hook'), 'utf8'),
+      )
 
       if (process.platform === 'win32') {
         expect(command).toContain('powershell.exe')
         expect(command).toContain('kiro-status-hook.ps1')
+        expect(command).toContain('--read-stdin')
+        expect(openHook.then.command).toMatch(/^&\s+"/)
+        expect(askingHook.then.command).toContain('kiro-status-hook.ps1')
+        expect(askingHook.then.command).toContain('asking')
+        expect(askingHook.then.command).toContain('--read-stdin')
       } else {
         expect(command).toContain(process.execPath)
         expect(command).toContain('kiro-status-hook.cjs')
@@ -97,6 +108,91 @@ describe('platform script compatibility', () => {
       const testAgent = fs.readFileSync(testAgentPath, 'utf8')
       expect(testAgent).toContain('name: buddy-test')
       expect(testAgent).toContain('test')
+    } finally {
+      cleanup(tempDir)
+    }
+  })
+
+  it('runs generated Windows IDE hooks through PowerShell and records approval context', () => {
+    if (process.platform !== 'win32') {
+      return
+    }
+
+    const tempDir = makeTempDir()
+    const statusFilePath = path.join(tempDir, 'status.json')
+
+    try {
+      const installResult = spawnSync(process.execPath, ['scripts/install-kiro-hooks.cjs'], {
+        cwd: projectRoot,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          KIRO_BUDDY_WORKSPACE: tempDir,
+        },
+      })
+      expect(installResult.status).toBe(0)
+
+      const workingHook = JSON.parse(
+        fs.readFileSync(path.join(tempDir, '.kiro', 'hooks', 'kiro-buddy-working.kiro.hook'), 'utf8'),
+      )
+      const askingHook = JSON.parse(
+        fs.readFileSync(path.join(tempDir, '.kiro', 'hooks', 'kiro-buddy-waiting.kiro.hook'), 'utf8'),
+      )
+
+      const promptEvent = JSON.stringify({
+        hook_event_name: 'promptSubmit',
+        prompt: 'please update requirements.md',
+      })
+      const workingResult = spawnSync(
+        'powershell.exe',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', workingHook.then.command],
+        {
+          cwd: tempDir,
+          encoding: 'utf8',
+          input: promptEvent,
+          env: {
+            ...process.env,
+            KIRO_BUDDY_NO_AUTOSTART: '1',
+            KIRO_BUDDY_STATUS_FILE: statusFilePath,
+          },
+        },
+      )
+
+      expect(workingResult.status).toBe(0)
+      expect(JSON.parse(fs.readFileSync(statusFilePath, 'utf8'))).toMatchObject({
+        status: 'working',
+        message: 'Prompt: please update requirements.md',
+        phase: 'requirements',
+        context: 'Prompt: please update requirements.md',
+      })
+
+      const approvalEvent = JSON.stringify({
+        hook_event_name: 'preToolUse',
+        tool_name: 'write',
+        path: path.join(tempDir, 'requirements.md'),
+      })
+      const askingResult = spawnSync(
+        'powershell.exe',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', askingHook.then.command],
+        {
+          cwd: tempDir,
+          encoding: 'utf8',
+          input: approvalEvent,
+          env: {
+            ...process.env,
+            KIRO_BUDDY_NO_AUTOSTART: '1',
+            KIRO_BUDDY_STATUS_FILE: statusFilePath,
+          },
+        },
+      )
+
+      expect(askingResult.status).toBe(0)
+      expect(JSON.parse(fs.readFileSync(statusFilePath, 'utf8'))).toMatchObject({
+        status: 'asking',
+        message: 'Kiro is asking for your input',
+        phase: 'requirements',
+        context: 'requirements.md',
+      })
     } finally {
       cleanup(tempDir)
     }

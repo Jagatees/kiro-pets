@@ -228,14 +228,14 @@ const hooks = [
     name: 'Kiro Buddy Open',
     description: 'Opens Kiro Buddy manually and switches it to the ready idle state.',
     when: { type: 'userTriggered' },
-    command: controlCommandFor('open'),
+    command: controlShellCommandFor('open'),
   },
   {
     shortName: 'kiro-buddy-close',
     name: 'Kiro Buddy Close',
     description: 'Closes Kiro Buddy manually until it is opened again.',
     when: { type: 'userTriggered' },
-    command: controlCommandFor('close'),
+    command: controlShellCommandFor('close'),
   },
   {
     shortName: 'kiro-buddy-working',
@@ -243,7 +243,7 @@ const hooks = [
     description:
       'Notifies Kiro Buddy to switch to working whenever a prompt is submitted to the agent.',
     when: { type: 'promptSubmit' },
-    command: commandFor('working'),
+    command: commandFor('working', undefined, { readStdin: true }),
   },
   {
     shortName: 'kiro-buddy-waiting',
@@ -251,7 +251,7 @@ const hooks = [
     description:
       'Automatically switches Kiro Buddy to asking when Kiro waits for user approval or input.',
     when: { type: 'preToolUse' },
-    command: commandFor('asking'),
+    command: commandFor('asking', undefined, { readStdin: true }),
   },
   {
     shortName: 'kiro-buddy-tool-running',
