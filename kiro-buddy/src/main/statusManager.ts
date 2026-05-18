@@ -250,11 +250,14 @@ class StatusManagerImpl {
       return
     }
 
-    // Step 4: Debounce — skip if same status and within DEBOUNCE_MS window
+    // Step 4: Debounce identical rapid repeats, but let prompt/message changes through.
     const lastPayload = this.getCurrentStatus()
     if (
       lastPayload !== null &&
       payload.status === lastPayload.status &&
+      payload.message === lastPayload.message &&
+      payload.phase === lastPayload.phase &&
+      payload.context === lastPayload.context &&
       payload.timestamp - lastPayload.timestamp < DEBOUNCE_MS
     ) {
       return

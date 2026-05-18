@@ -272,18 +272,18 @@ describe('StatusManager — property tests', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // Property 5: Debounce processes only the most recent update
+  // Property 5: Debounce skips identical rapid repeats
   // ---------------------------------------------------------------------------
 
   /**
    * Arbitrary that generates a sequence of N (N >= 2) valid StatusPayload
-   * objects all sharing the same status and with timestamps within a 50ms
-   * window of each other (i.e., each subsequent timestamp is within
+   * objects all sharing the same status and message, with timestamps within a
+   * 50ms window of each other (i.e., each subsequent timestamp is within
    * DEBOUNCE_MS of the first payload's timestamp).
    *
    * The first payload acts as the "dispatched" baseline; all subsequent
    * payloads should be debounced because:
-   *   - They share the same status as the last dispatched payload
+   *   - They are identical to the last dispatched payload except timestamp
    *   - Their timestamp difference from the last dispatched payload is < 50ms
    */
   const debounceSequenceArb = fc
@@ -303,7 +303,7 @@ describe('StatusManager — property tests', () => {
           fc.tuple(
             // Each subsequent timestamp is within [1, DEBOUNCE_MS - 1] of the base
             fc.integer({ min: 1, max: DEBOUNCE_MS - 1 }),
-            fc.string({ minLength: 1, maxLength: MESSAGE_MAX_CHARS }),
+            fc.constant(firstMessage),
           ),
           { minLength: n, maxLength: n },
         )
@@ -325,23 +325,23 @@ describe('StatusManager — property tests', () => {
     )
 
   /**
-   * Property 5: Debounce processes only the most recent update
+   * Property 5: Debounce skips identical rapid repeats
    * **Validates: Requirements 2.5**
    *
-   * For a sequence of N valid payloads all sharing the same status and with
-   * timestamps within the 50ms debounce window of the first dispatched
-   * payload, the subscriber SHALL be called exactly once (for the first
-   * payload) and NOT called for any subsequent payloads in the window.
+   * For a sequence of N valid payloads all sharing the same status, message,
+   * phase, and context, with timestamps within the 50ms debounce window of the
+   * first dispatched payload, the subscriber SHALL be called exactly once (for
+   * the first payload) and NOT called for any subsequent payloads in the window.
    *
    * The debounce check in `processStatusUpdate` is:
-   *   if lastPayload.status === payload.status AND
+   *   if lastPayload status/message/phase/context match payload AND
    *      (payload.timestamp - lastPayload.timestamp) < DEBOUNCE_MS → skip
    *
    * So after the first payload is dispatched and stored as `currentStatus`,
-   * all subsequent payloads with the same status and a timestamp within
-   * DEBOUNCE_MS of that first payload are skipped.
+   * all subsequent identical payloads with a timestamp within DEBOUNCE_MS of
+   * that first payload are skipped.
    */
-  it('Property 5: subsequent same-status payloads within the debounce window are skipped', () => {
+  it('Property 5: subsequent identical payloads within the debounce window are skipped', () => {
     const callback = jest.fn()
     statusManager.onStatusChange(callback)
 

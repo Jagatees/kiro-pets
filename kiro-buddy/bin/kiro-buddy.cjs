@@ -25,11 +25,16 @@ function writeLastCommand(command) {
   } catch {}
 }
 
-function writeLaunchRequest(command) {
+function writeLaunchRequest(command, options = {}) {
   fs.mkdirSync(appDataDir(), { recursive: true })
   fs.writeFileSync(
     launchRequestPath,
-    `${JSON.stringify({ command, timestamp: Date.now(), packageRoot })}\n`,
+    `${JSON.stringify({
+      command,
+      timestamp: Date.now(),
+      packageRoot,
+      exitWithKiro: options.exitWithKiro !== false,
+    })}\n`,
     'utf8',
   )
 }
@@ -75,10 +80,11 @@ function startBuddy() {
   process.exit(result.status ?? 1)
 }
 
-function startBuddyDetached(commandName = 'buddy-open') {
+function startBuddyDetached(commandName = 'buddy-open', options = {}) {
+  const exitWithKiro = options.exitWithKiro !== false
   writeLastCommand(commandName)
   clearManualCloseMarker()
-  writeLaunchRequest(commandName)
+  writeLaunchRequest(commandName, { exitWithKiro })
 
   if (process.env.KIRO_BUDDY_DRY_RUN === '1') {
     console.log(`Kiro Buddy: open requested (${commandName})`)
@@ -90,7 +96,9 @@ function startBuddyDetached(commandName = 'buddy-open') {
   if (process.platform === 'win32') {
     const quotePowerShellString = (value) => `'${String(value).replace(/'/g, "''")}'`
     const command = [
-      "$env:KIRO_BUDDY_EXIT_WITH_KIRO = '1';",
+      exitWithKiro
+        ? "$env:KIRO_BUDDY_EXIT_WITH_KIRO = '1';"
+        : 'Remove-Item Env:KIRO_BUDDY_EXIT_WITH_KIRO -ErrorAction SilentlyContinue;',
       `Start-Process -FilePath ${quotePowerShellString(electronBinary)}`,
       `-ArgumentList ${quotePowerShellString(packageRoot)}`,
       `-WorkingDirectory ${quotePowerShellString(packageRoot)}`,
@@ -110,14 +118,18 @@ function startBuddyDetached(commandName = 'buddy-open') {
     return
   }
 
+  const childEnv = { ...process.env }
+  if (exitWithKiro) {
+    childEnv.KIRO_BUDDY_EXIT_WITH_KIRO = '1'
+  } else {
+    delete childEnv.KIRO_BUDDY_EXIT_WITH_KIRO
+  }
+
   const child = spawn(electronBinary, [packageRoot], {
     cwd: packageRoot,
     detached: true,
     stdio: 'ignore',
-    env: {
-      ...process.env,
-      KIRO_BUDDY_EXIT_WITH_KIRO: '1',
-    },
+    env: childEnv,
     windowsHide: true,
   })
   child.unref()
@@ -307,7 +319,7 @@ function handleCliCommand(args) {
       break
     case 'open':
     case 'on':
-      startBuddyDetached('buddy-cli-open')
+      startBuddyDetached('buddy-cli-open', { exitWithKiro: false })
       runNodeScript('scripts/kiro-status-hook.cjs', ['idle'], {
         ...process.env,
         KIRO_BUDDY_NO_AUTOSTART: '1',

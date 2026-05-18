@@ -199,6 +199,31 @@ describe('statusManager.initialize() — existing file (Req 2.3)', () => {
     expect(current).not.toBeNull()
     expect(current!.status).toBe('idle')
   })
+
+  it('dispatches same-status prompt updates when the message changes inside the debounce window', async () => {
+    const firstPayload = {
+      status: 'working',
+      message: 'Prompt: first request',
+      timestamp: 1718000001000,
+    }
+    const secondPayload = {
+      status: 'working',
+      message: 'Prompt: second request',
+      timestamp: 1718000001001,
+    }
+    mockExistsSync.mockReturnValue(true)
+    mockReadFileSync.mockReturnValue(JSON.stringify(firstPayload))
+
+    const subscriber = jest.fn()
+    sm.onStatusChange(subscriber)
+
+    await sm.initialize(VALID_FILE_PATH)
+    mockReadFileSync.mockReturnValue(JSON.stringify(secondPayload))
+    sm.processStatusUpdate(VALID_FILE_PATH)
+
+    expect(subscriber).toHaveBeenCalledTimes(2)
+    expect(subscriber.mock.calls[1][0]).toMatchObject(secondPayload)
+  })
 })
 
 // ---------------------------------------------------------------------------

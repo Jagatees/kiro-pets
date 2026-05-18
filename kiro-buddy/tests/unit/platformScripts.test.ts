@@ -4,6 +4,11 @@ import path from 'path'
 import { spawnSync } from 'child_process'
 
 const projectRoot = path.resolve(__dirname, '..', '..')
+const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+
+function normalizeCommand(command: string): string {
+  return command.replace(/\\/g, '/')
+}
 
 function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'kiro-buddy-platform-'))
@@ -19,9 +24,10 @@ describe('platform script compatibility', () => {
     const statusFilePath = path.join(tempDir, 'status.json')
 
     try {
-      const result = spawnSync('npm', ['run', 'status:working'], {
+      const result = spawnSync(npmBin, ['run', 'status:working'], {
         cwd: projectRoot,
         encoding: 'utf8',
+        shell: process.platform === 'win32',
         env: {
           ...process.env,
           KIRO_BUDDY_NO_AUTOSTART: '1',
@@ -85,7 +91,7 @@ describe('platform script compatibility', () => {
       expect(openAgent).toContain('name: buddy-open')
       expect(openAgent).toContain('tools: ["shell"]')
       expect(openAgent).toContain(process.execPath)
-      expect(openAgent).toContain('bin/kiro-buddy.cjs')
+      expect(normalizeCommand(openAgent)).toContain('bin/kiro-buddy.cjs')
       expect(openAgent).toContain('open')
 
       const testAgent = fs.readFileSync(testAgentPath, 'utf8')
@@ -170,10 +176,19 @@ describe('platform script compatibility', () => {
 
       const config = JSON.parse(fs.readFileSync(agentPath, 'utf8'))
       expect(config.name).toBe('kiro-buddy-cli')
-      expect(config.hooks.agentSpawn[0].command).toContain('bin/kiro-buddy.cjs')
+      expect(normalizeCommand(config.hooks.agentSpawn[0].command)).toContain('bin/kiro-buddy.cjs')
+      expect(config.hooks.agentSpawn[0].command).toContain('cli')
       expect(config.hooks.agentSpawn[0].command).toContain('open')
       expect(config.hooks.userPromptSubmit[0].command).toContain('kiro-status-hook.cjs')
       expect(config.hooks.userPromptSubmit[0].command).toContain('working')
+      expect(config.hooks.preToolUse[0].matcher).toBe('*')
+      expect(config.hooks.preToolUse[0].command).toContain('kiro-status-hook.cjs')
+      expect(config.hooks.preToolUse[0].command).toContain('asking')
+      if (process.platform === 'win32') {
+        expect(config.hooks.agentSpawn[0].command).toMatch(/^&\s+"/)
+        expect(config.hooks.userPromptSubmit[0].command).toMatch(/^&\s+"/)
+        expect(config.hooks.preToolUse[0].command).toMatch(/^&\s+"/)
+      }
       expect(config.hooks.postToolUse[0].matcher).toBe('*')
       expect(config.hooks.stop[0].command).toContain('done')
     } finally {

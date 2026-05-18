@@ -73,6 +73,7 @@ describe('kiro-buddy CLI open/close controls', () => {
     })
     expect(readJson<{ command: string }>(launchRequestPath)).toMatchObject({
       command: lastCommand,
+      exitWithKiro: true,
     })
     expect(readJson<{ status: string }>(statusFilePath)).toMatchObject({
       status: 'idle',
@@ -92,6 +93,7 @@ describe('kiro-buddy CLI open/close controls', () => {
     })
     expect(readJson<{ command: string }>(launchRequestPath)).toMatchObject({
       command: 'buddy-test',
+      exitWithKiro: true,
     })
   })
 
@@ -106,12 +108,16 @@ describe('kiro-buddy CLI open/close controls', () => {
     expect(readJson<{ command: string }>(lastCommandPath)).toMatchObject({
       command: 'buddy-cli-open',
     })
+    expect(readJson<{ command: string; exitWithKiro: boolean }>(launchRequestPath)).toMatchObject({
+      command: 'buddy-cli-open',
+      exitWithKiro: false,
+    })
     expect(readJson<{ status: string }>(statusFilePath)).toMatchObject({
       status: 'idle',
     })
   })
 
-  it('cli install writes the Kiro CLI agent config', () => {
+  it('cli install writes the Kiro CLI agent config and the installed agent opens Buddy for CLI sessions', () => {
     const result = spawnSync(process.execPath, [cliPath, 'cli', 'install'], {
       cwd: projectRoot,
       encoding: 'utf8',
@@ -124,6 +130,58 @@ describe('kiro-buddy CLI open/close controls', () => {
     })
 
     expect(result.status).toBe(0)
-    expect(fs.existsSync(path.join(tempDir, '.kiro', 'agents', 'kiro-buddy-cli.json'))).toBe(true)
+    const agentPath = path.join(tempDir, '.kiro', 'agents', 'kiro-buddy-cli.json')
+    expect(fs.existsSync(agentPath)).toBe(true)
+
+    const agentConfig = readJson<{
+      hooks: {
+        agentSpawn: Array<{ command: string }>
+        preToolUse: Array<{ command: string; matcher: string }>
+      }
+    }>(agentPath)
+    expect(agentConfig.hooks.agentSpawn[0].command).toContain('cli')
+    expect(agentConfig.hooks.agentSpawn[0].command).toContain('open')
+    expect(agentConfig.hooks.preToolUse[0]).toMatchObject({
+      matcher: '*',
+    })
+    expect(agentConfig.hooks.preToolUse[0].command).toContain('asking')
+    if (process.platform === 'win32') {
+      expect(agentConfig.hooks.agentSpawn[0].command).toMatch(/^&\s+"/)
+      expect(agentConfig.hooks.preToolUse[0].command).toMatch(/^&\s+"/)
+    }
+
+    const commandEnv = {
+      ...process.env,
+      HOME: tempDir,
+      USERPROFILE: tempDir,
+      KIRO_BUDDY_DRY_RUN: '1',
+      KIRO_BUDDY_STATUS_FILE: statusFilePath,
+    }
+    const openResult =
+      process.platform === 'win32'
+        ? spawnSync(
+            'powershell.exe',
+            ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', agentConfig.hooks.agentSpawn[0].command],
+            {
+              cwd: tempDir,
+              encoding: 'utf8',
+              env: commandEnv,
+            },
+          )
+        : spawnSync(agentConfig.hooks.agentSpawn[0].command, {
+            cwd: tempDir,
+            encoding: 'utf8',
+            shell: true,
+            env: commandEnv,
+          })
+
+    expect(openResult.status).toBe(0)
+    expect(readJson<{ command: string; exitWithKiro: boolean }>(launchRequestPath)).toMatchObject({
+      command: 'buddy-cli-open',
+      exitWithKiro: false,
+    })
+    expect(readJson<{ status: string }>(statusFilePath)).toMatchObject({
+      status: 'idle',
+    })
   })
 })

@@ -85,8 +85,8 @@ export interface AppConfig {
   window: {
     x: number       // Last known x position, default: 100
     y: number       // Last known y position, default: 100
-    width: number   // Default: 360
-    height: number  // Default: 300
+    width: number   // Default: 390
+    height: number  // Default: 360
   }
   statusFilePath: string  // Absolute path to status.json
   notifications: NotificationConfig
@@ -98,8 +98,8 @@ export interface AppConfig {
  * Configuration for the Electron BrowserWindow overlay
  */
 export interface OverlayWindowConfig {
-  width: number        // default: 360
-  height: number       // default: 300
+  width: number        // default: 390
+  height: number       // default: 360
   x: number            // last saved x position
   y: number            // last saved y position
   alwaysOnTop: boolean // default: true

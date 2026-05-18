@@ -47,20 +47,21 @@ For published installs:
 
 ```bash
 npx -y @jagatees/kiro-buddy cli install
-kiro-cli --agent kiro-buddy-cli
+kiro-cli chat --agent kiro-buddy-cli
 ```
 
 For local development:
 
 ```bash
 npm run cli-hooks:install
-kiro-cli --agent kiro-buddy-cli
+kiro-cli chat --agent kiro-buddy-cli
 ```
 
 The CLI agent config wires Buddy to these Kiro CLI hook events:
 
 - `agentSpawn` opens Buddy.
 - `userPromptSubmit` switches Buddy to working and records prompt context.
+- `preToolUse` switches Buddy to asking when Kiro CLI is waiting for tool approval.
 - `postToolUse` keeps Buddy in working during tool activity.
 - `stop` switches Buddy to done.
 

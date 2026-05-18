@@ -7,6 +7,7 @@ const workspaceAgentDir = path.join(workspaceRoot, '.kiro', 'agents')
 const globalAgentDir = path.join(os.homedir(), '.kiro', 'agents')
 const cliPath = path.join(path.resolve(__dirname, '..'), 'bin', 'kiro-buddy.cjs')
 const statusHookPath = path.join(path.resolve(__dirname), 'kiro-status-hook.cjs')
+const isWindows = process.platform === 'win32'
 
 function quoteCommandArg(value) {
   return `"${String(value).replace(/"/g, '\\"')}"`
@@ -14,6 +15,7 @@ function quoteCommandArg(value) {
 
 function statusCommand(status, options = {}) {
   const args = [
+    ...(isWindows ? ['&'] : []),
     quoteCommandArg(process.execPath),
     quoteCommandArg(statusHookPath),
     status,
@@ -28,7 +30,13 @@ function statusCommand(status, options = {}) {
 }
 
 function cliCommand(action) {
-  return [quoteCommandArg(process.execPath), quoteCommandArg(cliPath), action].join(' ')
+  return [
+    ...(isWindows ? ['&'] : []),
+    quoteCommandArg(process.execPath),
+    quoteCommandArg(cliPath),
+    'cli',
+    action,
+  ].join(' ')
 }
 
 const config = {
@@ -47,6 +55,13 @@ const config = {
     userPromptSubmit: [
       {
         command: statusCommand('working'),
+        timeout_ms: 30000,
+      },
+    ],
+    preToolUse: [
+      {
+        matcher: '*',
+        command: statusCommand('asking'),
         timeout_ms: 30000,
       },
     ],
@@ -84,4 +99,4 @@ console.log('Installed Kiro CLI Buddy agent config:')
 for (const agentPath of written) {
   console.log(`- ${agentPath}`)
 }
-console.log('Use it with: kiro-cli --agent kiro-buddy-cli')
+console.log('Use it with: kiro-cli chat --agent kiro-buddy-cli')
