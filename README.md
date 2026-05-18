@@ -2,6 +2,10 @@
 
 Kiro Buddy shows a floating pet for agent activity. Kiro Buddy reacts to Kiro agent activity.
 
+## Current Progress
+
+The active package is in `kiro-buddy/`. See `kiro-buddy/README.md` for the current Windows IDE, Windows terminal, macOS, and npm publish progress.
+
 ## Demo
 
 ![Kiro Buddy demo](kiro-buddy/docs/assets/kiro-buddy-demo.gif)
